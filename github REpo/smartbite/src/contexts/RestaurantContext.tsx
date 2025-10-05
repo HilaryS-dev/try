@@ -1,24 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { restaurantsAPI } from '../services/api';
-
-export interface Restaurant {
-  id: string;
-  name: string;
-  description: string;
-  image: string;
-  town: string;
-  rating: number;
-  delivery_time: string;
-  delivery_fee: number;
-  min_order: number;
-  categories: string[];
-  is_active: boolean;
-  user_id: string;
-  phone: string;
-  address: string;
-  created_at: string;
-  updated_at: string;
-}
+import { restaurantService, Restaurant } from '../services/supabase-api';
+import { useAuth } from './AuthContext';
 
 interface RestaurantContextType {
   restaurants: Restaurant[];
@@ -35,6 +17,7 @@ interface RestaurantContextType {
 const RestaurantContext = createContext<RestaurantContextType | undefined>(undefined);
 
 export function RestaurantProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [myRestaurant, setMyRestaurant] = useState<Restaurant | null>(null);
   const [loading, setLoading] = useState(false);
@@ -47,10 +30,9 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
       setLoading(true);
       setError(null);
       console.log('🔄 Fetching restaurants...');
-      
-      const response = await restaurantsAPI.getRestaurants();
-      const restaurantData = response.data || [];
-      
+
+      const restaurantData = await restaurantService.getRestaurants();
+
       console.log(`✅ Fetched ${restaurantData.length} restaurants`);
       setRestaurants(restaurantData);
     } catch (error: any) {
@@ -63,29 +45,30 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
   };
 
   const fetchMyRestaurant = async () => {
+    if (!user) return;
+
     try {
       setError(null);
       console.log('🔄 Fetching my restaurant...');
-      
-      const response = await restaurantsAPI.getMyRestaurant();
-      setMyRestaurant(response.data);
+
+      const data = await restaurantService.getMyRestaurant(user.id);
+      setMyRestaurant(data);
       console.log('✅ My restaurant loaded');
     } catch (error: any) {
       console.error('❌ Failed to fetch my restaurant:', error);
-      if (error.response?.status !== 404) {
-        setError('Failed to load restaurant');
-      }
+      setError('Failed to load restaurant');
       setMyRestaurant(null);
     }
   };
 
   const createRestaurant = async (restaurantData: any): Promise<string> => {
+    if (!user) throw new Error('User not authenticated');
+
     try {
       setLoading(true);
       setError(null);
       console.log('🔄 Creating restaurant...', restaurantData);
-      
-      // Frontend validation
+
       const requiredFields = ['name', 'description', 'town', 'address', 'phone', 'delivery_time', 'delivery_fee', 'min_order', 'categories'];
       for (const field of requiredFields) {
         if (!restaurantData[field] || (Array.isArray(restaurantData[field]) && restaurantData[field].length === 0)) {
@@ -93,7 +76,6 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
         }
       }
 
-      // Validate numeric fields
       if (isNaN(Number(restaurantData.delivery_fee)) || Number(restaurantData.delivery_fee) < 0) {
         throw new Error('Valid delivery fee is required');
       }
@@ -101,17 +83,16 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
         throw new Error('Valid minimum order amount is required');
       }
 
-      const response = await restaurantsAPI.createRestaurant(restaurantData);
-      
-      // Refresh data
+      const response = await restaurantService.createRestaurant(restaurantData, user.id);
+
       await Promise.all([fetchMyRestaurant(), fetchRestaurants()]);
-      
+
       console.log('✅ Restaurant created successfully');
-      return response.data.restaurantId;
+      return response.restaurantId;
     } catch (error: any) {
       console.error('❌ Failed to create restaurant:', error);
-      
-      const errorMessage = error.response?.data?.error || error.message || 'Failed to create restaurant';
+
+      const errorMessage = error.message || 'Failed to create restaurant';
       setError(errorMessage);
       throw new Error(errorMessage);
     } finally {
@@ -124,16 +105,15 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
       setLoading(true);
       setError(null);
       console.log('🔄 Updating restaurant...', restaurantId);
-      
-      await restaurantsAPI.updateRestaurant(restaurantId, updates);
-      
-      // Refresh data
+
+      await restaurantService.updateRestaurant(restaurantId, updates);
+
       await Promise.all([fetchMyRestaurant(), fetchRestaurants()]);
-      
+
       console.log('✅ Restaurant updated successfully');
     } catch (error: any) {
       console.error('❌ Failed to update restaurant:', error);
-      const errorMessage = error.response?.data?.error || error.message || 'Failed to update restaurant';
+      const errorMessage = error.message || 'Failed to update restaurant';
       setError(errorMessage);
       throw new Error(errorMessage);
     } finally {
@@ -141,7 +121,6 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
     }
   };
 
-  // Auto-fetch restaurants on mount
   useEffect(() => {
     fetchRestaurants();
   }, []);
@@ -170,3 +149,5 @@ export function useRestaurants() {
   }
   return context;
 }
+
+export type { Restaurant };

@@ -1,14 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { authAPI } from '../services/api';
-
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-  role: 'customer' | 'owner' | 'agent' | 'admin' | 'manager' | 'driver';
-  phone?: string;
-  town?: string;
-}
+import { authService, User } from '../services/supabase-api';
 
 interface AuthContextType {
   user: User | null;
@@ -27,9 +18,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const storedUser = localStorage.getItem('smartbite_user');
     if (storedUser) {
-      authAPI.verify()
+      const userData = JSON.parse(storedUser);
+      authService.verify(userData.id)
         .then(response => {
-          setUser(response.data.user);
+          setUser(response.user);
         })
         .catch(() => {
           localStorage.removeItem('smartbite_user');
@@ -44,8 +36,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
-      const response = await authAPI.login({ email, password });
-      const { user: userData } = response.data;
+      const response = await authService.login({ email, password });
+      const { user: userData } = response;
 
       localStorage.setItem('smartbite_user', JSON.stringify(userData));
       setUser(userData);
@@ -59,8 +51,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const register = async (userData: any): Promise<boolean> => {
     try {
-      const response = await authAPI.register(userData);
-      const { user: newUser } = response.data;
+      const response = await authService.register(userData);
+      const { user: newUser } = response;
 
       localStorage.setItem('smartbite_user', JSON.stringify(newUser));
       setUser(newUser);
@@ -72,12 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const logout = async () => {
-    try {
-      await authAPI.logout?.();
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
+  const logout = () => {
     localStorage.removeItem('smartbite_user');
     setUser(null);
   };
@@ -96,3 +83,5 @@ export function useAuth() {
   }
   return context;
 }
+
+export type { User };

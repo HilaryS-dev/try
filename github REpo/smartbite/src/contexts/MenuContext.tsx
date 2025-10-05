@@ -1,19 +1,5 @@
 import React, { createContext, useContext, useState } from 'react';
-import { menuAPI } from '../services/api';
-
-export interface MenuItem {
-  id: string;
-  restaurant_id: string;
-  item_name: string;
-  item_description: string;
-  item_price: number;
-  image: string;
-  category: string;
-  is_available: boolean;
-  prep_time: number;
-  created_at: string;
-  updated_at: string;
-}
+import { menuService, MenuItem } from '../services/supabase-api';
 
 interface MenuContextType {
   menuItems: MenuItem[];
@@ -42,12 +28,11 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
       setLoading(true);
       setError(null);
       console.log(`🔄 Fetching menu for restaurant ${restaurantId}...`);
-      
-      const response = await menuAPI.getMenuItems(restaurantId);
-      const items = response.data || [];
-      
+
+      const items = await menuService.getMenuItems(restaurantId);
+
       console.log(`✅ Fetched ${items.length} menu items`);
-      setMenuItems(items);
+      setMenuItems(items as any);
     } catch (error: any) {
       console.error('❌ Failed to fetch menu items:', error);
       setError('Failed to load menu items');
@@ -62,29 +47,27 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
       setLoading(true);
       setError(null);
       console.log('🔄 Adding menu item...', itemData);
-      
-      // Frontend validation
-      const requiredFields = ['restaurant_id', 'item_name', 'item_description', 'item_price', 'category'];
+
+      const requiredFields = ['restaurant_id', 'name', 'description', 'price', 'category'];
       for (const field of requiredFields) {
         if (!itemData[field] || (typeof itemData[field] === 'string' && !itemData[field].trim())) {
           throw new Error(`${field.replace('_', ' ')} is required`);
         }
       }
 
-      if (isNaN(Number(itemData.item_price)) || Number(itemData.item_price) <= 0) {
+      if (isNaN(Number(itemData.price)) || Number(itemData.price) <= 0) {
         throw new Error('Valid item price is required');
       }
 
-      const response = await menuAPI.createMenuItem(itemData);
-      
-      // Refresh menu items
+      const item = await menuService.createMenuItem(itemData);
+
       await fetchMenuItems(itemData.restaurant_id);
-      
+
       console.log('✅ Menu item added successfully');
-      return response.data.itemId;
+      return item.id;
     } catch (error: any) {
       console.error('❌ Failed to add menu item:', error);
-      const errorMessage = error.response?.data?.error || error.message || 'Failed to add menu item';
+      const errorMessage = error.message || 'Failed to add menu item';
       setError(errorMessage);
       throw new Error(errorMessage);
     } finally {
@@ -96,19 +79,18 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
     try {
       setError(null);
       console.log(`🔄 Updating menu item ${itemId}...`);
-      
-      await menuAPI.updateMenuItem(itemId, updates);
-      
-      // Refresh menu items for the restaurant
+
+      await menuService.updateMenuItem(itemId, updates);
+
       const item = menuItems.find(item => item.id === itemId);
       if (item) {
         await fetchMenuItems(item.restaurant_id);
       }
-      
+
       console.log('✅ Menu item updated successfully');
     } catch (error: any) {
       console.error('❌ Failed to update menu item:', error);
-      const errorMessage = error.response?.data?.error || error.message || 'Failed to update menu item';
+      const errorMessage = error.message || 'Failed to update menu item';
       setError(errorMessage);
       throw new Error(errorMessage);
     }
@@ -118,18 +100,18 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
     try {
       setError(null);
       console.log(`🔄 Deleting menu item ${itemId}...`);
-      
+
       const item = menuItems.find(item => item.id === itemId);
-      await menuAPI.deleteMenuItem(itemId);
-      
+      await menuService.deleteMenuItem(itemId);
+
       if (item) {
         await fetchMenuItems(item.restaurant_id);
       }
-      
+
       console.log('✅ Menu item deleted successfully');
     } catch (error: any) {
       console.error('❌ Failed to delete menu item:', error);
-      const errorMessage = error.response?.data?.error || error.message || 'Failed to delete menu item';
+      const errorMessage = error.message || 'Failed to delete menu item';
       setError(errorMessage);
       throw new Error(errorMessage);
     }
@@ -139,7 +121,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
     try {
       const item = menuItems.find(item => item.id === itemId);
       if (item) {
-        await updateMenuItem(itemId, { is_available: !item.is_available });
+        await updateMenuItem(itemId, { available: !(item as any).available });
       }
     } catch (error: any) {
       console.error('❌ Failed to toggle availability:', error);
@@ -150,10 +132,9 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
   const getMenuByRestaurant = async (restaurantId: string): Promise<MenuItem[]> => {
     try {
       console.log(`🔄 Getting menu for restaurant ${restaurantId}...`);
-      const response = await menuAPI.getMenuItems(restaurantId);
-      const items = response.data || [];
+      const items = await menuService.getMenuItems(restaurantId);
       console.log(`✅ Retrieved ${items.length} menu items`);
-      return items;
+      return items as any;
     } catch (error: any) {
       console.error('❌ Failed to get menu by restaurant:', error);
       return [];
